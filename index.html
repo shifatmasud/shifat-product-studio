@@ -305,7 +305,7 @@ const M = {
 };
 const tinted = [M.body, M.back, M.logo, M.ring]; // follow the colorway
 // Camera plateau: same anodized finish, tuned separately (in the ref it faces the camera and reads darker than the frame edge)
-M.plateau = M.body.clone(); M.plateau.envMapIntensity = 0.7; M.plateau.clearcoat = 0.25;
+M.plateau = M.body.clone(); M.plateau.envMapIntensity = 0.5; M.plateau.clearcoat = 0.0;
 tinted.push(M.plateau);
 if (LOW) { M.lensCore.iridescence = 0; M.lens.iridescence = 0; } // iridescence is the costliest lens term
 
