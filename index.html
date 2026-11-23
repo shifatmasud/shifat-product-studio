@@ -28,6 +28,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 import { SVGLoader } from 'three/addons/loaders/SVGLoader.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { VignetteShader } from 'three/addons/shaders/VignetteShader.js';
 import { gsap } from 'gsap';
 
 /* =====================================================================
@@ -44,8 +50,8 @@ const Tokens = {
 };
 
 const Theme = {
-  backdrop: { light: Tokens.paper, dark: Tokens.ink },
-  colorways: { titanium: '#8a8781', silver: '#d6d6d8', ink: '#2a2c30', shade: '#d81b60', peach: '#ffb08a' },
+  backdrop: { light: Tokens.paper, dark: '#000000' }, // dark = pure black, 1:1 with Apple's product shots
+  colorways: { titanium: '#8a8781', silver: '#d6d6d8', ink: '#2a2c30', cosmic: '#dc7a3c', shade: '#d81b60', peach: '#ffb08a' },
   angles: {
     hero:  { azimuth: 150, elevation: 8 },
     front: { azimuth: 20,  elevation: 4 },
@@ -132,8 +138,9 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true,
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.NeutralToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMapping = THREE.NeutralToneMapping; // ref check: AgX muddied cosmic orange; Neutral keeps Apple's hues true
+const EXPOSURE = 0.85;
+renderer.toneMappingExposure = EXPOSURE;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.VSMShadowMap;
 
@@ -145,14 +152,28 @@ const camera = new THREE.PerspectiveCamera(Theme.fov, innerWidth / innerHeight, 
       Camera sits on +Z in this frame. The rig follows the camera azimuth.
 ===================================================================== */
 const ThreePoint = {
-  key:  { name: 'key',  pos: [-2.4, 2.4, 2.6],  size: [1.8, 1.8],  intensity: 6 },   // front-left, above: shape
+  key:  { name: 'key',  pos: [-1.0, 2.6, 1.0],  aim: [0, -0.56, 0], size: [1.8, 1.8],  intensity: 6 },   // high front-left, aimed low: top-down falloff like Apple's shots (fit to ref)
   fill: { name: 'fill', pos: [2.8, 0.6, 2.4],   size: [2.6, 2.6],  intensity: 1.5 }, // front-right, low: lifts shadows
   rim:  { name: 'rim',  pos: [1.8, 1.4, -2.6],  size: [0.35, 2.6], intensity: 16 },  // behind: edge separation
 };
 const ModeRecipe = {
-  dark:  { room: 0.0,  floor: 0.0,  key: 1.0, fill: 0.8, rim: 1.0, mirror: 1.6 },
+  dark:  { room: 0.2, floor: 0.0, key: 1.2, fill: 0.15, rim: 0.55, mirror: 2.2, envSize: 2.4 }, // fit to Apple's cosmic orange shot: warm dim room = warm (not black) shadows; rim kept soft (ref has no hot white edge)
   light: { room: 0.18, floor: 0.35, key: 0.8, fill: 1.0, rim: 0.7, mirror: 1.6 },
 };
+
+// Softbox diffusion: bright core, feathered edges
+const softboxTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  const img = g.createImageData(256, 256);
+  for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
+    const u = Math.abs(x / 127.5 - 1), v = Math.abs(y / 127.5 - 1);
+    const e = Math.pow(1 - Math.max(u, v) ** 6, 1.5) * (0.75 + 0.25 * (1 - v * v));
+    const i = (y * 256 + x) * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = 255 * e; img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
 
 // Reflections show the SAME three softboxes (one source of truth)
 function buildStudioEnv(mode) {
@@ -164,9 +185,9 @@ function buildStudioEnv(mode) {
   floor.rotation.x = -Math.PI / 2; floor.position.y = -3;
   env.add(floor);
   Object.values(ThreePoint).forEach((L) => {
-    const p = new THREE.Vector3(...L.pos), s = 7 / p.length();
+    const p = new THREE.Vector3(...L.pos), s = (7 / p.length()) * (r.envSize ?? 1.8);
     const m = new THREE.Mesh(new THREE.PlaneGeometry(L.size[0] * s, L.size[1] * s),
-      new THREE.MeshBasicMaterial({ color: new THREE.Color().setScalar(L.intensity * r.mirror * r[L.name]), side: THREE.DoubleSide }));
+      new THREE.MeshBasicMaterial({ map: softboxTex, color: new THREE.Color().setScalar(L.intensity * r.mirror * r[L.name]), side: THREE.DoubleSide }));
     m.position.copy(p.normalize().multiplyScalar(7));
     m.lookAt(0, 0, 0);
     env.add(m);
@@ -184,7 +205,7 @@ const lights = {};
 Object.values(ThreePoint).forEach((L) => {
   const l = new THREE.RectAreaLight(0xffffff, L.intensity, L.size[0], L.size[1]);
   l.position.set(...L.pos);
-  l.lookAt(0, 0, 0);
+  l.lookAt(...(L.aim ?? [0, 0, 0]));
   l.userData.base = L.intensity;
   rig.add(l);
   lights[L.name] = l;
@@ -212,19 +233,50 @@ ground.receiveShadow = true;
 scene.add(ground);
 const envMaps = { light: buildStudioEnv('light'), dark: buildStudioEnv('dark') };
 
+// Cinematic post: soft bloom on specular hits only + lens vignette, then AgX tone map / sRGB in OutputPass
+const composer = new EffectComposer(renderer);
+composer.setPixelRatio(renderer.getPixelRatio());
+composer.setSize(innerWidth, innerHeight);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.1, 0.25, 0.98); // only the hottest glints glow (ref has no halo)
+composer.addPass(bloom);
+const vignette = new ShaderPass(VignetteShader);
+vignette.uniforms.offset.value = 1.0;
+vignette.uniforms.darkness.value = 1.15;
+composer.addPass(vignette);
+composer.addPass(new OutputPass());
+
 /* =====================================================================
    3. Materials
 ===================================================================== */
+// Bead-blast micro texture: fine noise in roughness so highlights break up like real anodized aluminum / etched glass
+function grainTex(base, spread, repeat) {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d'), img = g.createImageData(256, 256);
+  let s = 1337; const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = 255 * THREE.MathUtils.clamp(base + (rnd() - 0.5) * spread, 0, 1);
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(repeat, repeat);
+  return t;
+}
+const bead = grainTex(0.85, 0.35, 6);   // multiplies material roughness
+const etch = grainTex(0.9, 0.25, 10);
+
 const M = {
-  // anodized aluminum unibody: color reads, not a mirror (anisotropy = brushed highlight)
-  body:    new THREE.MeshPhysicalMaterial({ color: Theme.colorways.titanium, metalness: 0.55, roughness: 0.42, anisotropy: 0.5, clearcoat: 0.3, clearcoatRoughness: 0.4 }),
-  // Ceramic Shield back panel: matte, frosted
-  back:    new THREE.MeshPhysicalMaterial({ color: Theme.colorways.titanium, metalness: 0, roughness: 0.65, clearcoat: 1, clearcoatRoughness: 0.45 }),
-  // Apple logo: tone-on-tone, a touch glossier than the frosted glass
-  logo:    new THREE.MeshPhysicalMaterial({ color: Theme.colorways.titanium, metalness: 0.1, roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.08 }),
-  ring:    new THREE.MeshPhysicalMaterial({ color: Theme.colorways.titanium, metalness: 1, roughness: 0.22, anisotropy: 0.3 }), // anodized, follows colorway
-  lensCore:new THREE.MeshPhysicalMaterial({ color: '#151a2a', metalness: 0.4, roughness: 0.1, clearcoat: 1 }),
-  lens:    new THREE.MeshPhysicalMaterial({ color: '#07080c', metalness: 0, roughness: 0.03, clearcoat: 1, clearcoatRoughness: 0, iridescence: 0.25, iridescenceIOR: 1.5 }),
+  // Anodized aluminum unibody: true metal, satin bead-blast, color lives in the reflections (Apple's look)
+  // (ref check: Apple's anodized color reads bright and saturated, so keep a strong diffuse share; metal shows in the edge highlights)
+  body:    new THREE.MeshPhysicalMaterial({ color: Theme.colorways.titanium, metalness: 0.55, roughness: 0.32, roughnessMap: bead, anisotropy: 0.3, clearcoat: 0.7, clearcoatRoughness: 0.12, envMapIntensity: 1.0 }), // fit to ref: anodized color + glossy clear reflections
+  // Ceramic Shield back: etched/frosted body under a thin glossy top layer -> soft sheen + a crisp streak
+  back:    new THREE.MeshPhysicalMaterial({ color: Theme.colorways.titanium, metalness: 0, roughness: 0.5, roughnessMap: etch, clearcoat: 0.3, clearcoatRoughness: 0.22, envMapIntensity: 0.5 }), // fit to ref: frosted, saturated
+  logo:    new THREE.MeshPhysicalMaterial({ color: Theme.colorways.titanium, metalness: 0.25, roughness: 0.14, clearcoat: 1, clearcoatRoughness: 0.04, envMapIntensity: 0.9 }),
+  ring:    new THREE.MeshPhysicalMaterial({ color: Theme.colorways.titanium, metalness: 1, roughness: 0.1, anisotropy: 0.6, envMapIntensity: 1.2 }), // diamond-cut, follows colorway
+  lensCore:new THREE.MeshPhysicalMaterial({ color: '#1c2848', metalness: 0.5, roughness: 0.08, clearcoat: 1, iridescence: 0.6, iridescenceIOR: 1.6 }),
+  // Sapphire cover with AR coating: deep black with violet/teal flicker at grazing angles
+  lens:    new THREE.MeshPhysicalMaterial({ color: '#05060a', metalness: 0, roughness: 0.02, clearcoat: 1, clearcoatRoughness: 0, iridescence: 0.3, iridescenceIOR: 1.8, envMapIntensity: 1.5 }),
   lensIn:  new THREE.MeshPhysicalMaterial({ color: '#0b0c10', metalness: 0.2, roughness: 0.25 }),
   sapphire:new THREE.MeshPhysicalMaterial({ color: '#202126', metalness: 0.1, roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0.02 }),
   screen:  new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false }), // unlit: only its own light
@@ -541,11 +593,12 @@ function setLighting(mode, instant = false) {
   paintUI(mode);
   applyRig(mode, instant);
   const bg = new THREE.Color(Theme.backdrop[mode]);
-  if (instant) { scene.background = bg; scene.environment = envMaps[mode]; ground.material.opacity = shadowFor(mode); return null; }
+  if (instant) { vignette.uniforms.darkness.value = mode === 'dark' ? 0.9 : 0.35; scene.background = bg; scene.environment = envMaps[mode]; ground.material.opacity = shadowFor(mode); return null; }
   const tl = gsap.timeline();
   tl.to(renderer, { toneMappingExposure: 0.35, duration: 0.35, ease: 'power2.in', onComplete: () => { scene.environment = envMaps[mode]; } });
   tl.to(scene.background, { r: bg.r, g: bg.g, b: bg.b, duration: 0.7, ease: 'power2.inOut' }, 0);
-  tl.to(renderer, { toneMappingExposure: 1.0, duration: 0.6, ease: 'power2.out' });
+  tl.to(renderer, { toneMappingExposure: EXPOSURE, duration: 0.6, ease: 'power2.out' });
+  gsap.to(vignette.uniforms.darkness, { value: mode === 'dark' ? 0.9 : 0.35, duration: 0.7 });
   return tl;
 }
 
@@ -559,9 +612,11 @@ function shot({ scale = 2, transparent = false } = {}) {
   camera.zoom = 1;
   camera.clearViewOffset();
   renderer.setPixelRatio(scale);
-  renderer.render(scene, camera);
+  if (transparent) renderer.render(scene, camera); // keep alpha: skip post
+  else { composer.setPixelRatio(scale); composer.setSize(innerWidth, innerHeight); composer.render(); }
   const url = renderer.domElement.toDataURL('image/png');
   renderer.setPixelRatio(prevPR);
+  composer.setPixelRatio(prevPR); composer.setSize(innerWidth, innerHeight);
   scene.background = prevBg;
   return url;
 }
@@ -750,7 +805,7 @@ function tick() {
   camera.setViewOffset(innerWidth, innerHeight, 0, view.shift, innerWidth, innerHeight);
   if (!tweening) controls.update();
   syncRig();
-  if (!STILL || stillFrames++ < 3) renderer.render(scene, camera); // still mode idles after a few frames
+  if (!STILL || stillFrames++ < 3) composer.render(); // still mode idles after a few frames
   requestAnimationFrame(tick);
 }
 addEventListener('resize', () => {
@@ -800,7 +855,12 @@ tick();
    13. Agent API
 ===================================================================== */
 window.studio = {
-  THREE, scene, camera, renderer, materials: M, theme: Theme, threePoint: ThreePoint, lights,
+  THREE, scene, camera, renderer, target, composer, bloom, vignette, modeRecipe: ModeRecipe, materials: M, theme: Theme, threePoint: ThreePoint, lights,
+  // re-light after editing modeRecipe / threePoint (used by the ref-matching tuner)
+  relight: () => {
+    envMaps.light = buildStudioEnv('light'); envMaps.dark = buildStudioEnv('dark');
+    scene.environment = envMaps[lighting]; applyRig(lighting, true);
+  },
   goTo, spin, setColor, setLighting, toggleScreen, shot, loadModel, setDrawer,
   build: (fn) => setProduct(fn({ THREE, slab, roundedRect, materials: M })),
   setAutoRotate: (on) => { autoRotate = on; },
