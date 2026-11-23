@@ -427,7 +427,7 @@ function buildPhone() {
   // Baked as a soft multiply-style gradient so the top stays bright and the bottom settles ~30% darker.
   const flagCv = document.createElement('canvas'); flagCv.width = 4; flagCv.height = 256;
   const fg = flagCv.getContext('2d'), fgrad = fg.createLinearGradient(0, 0, 0, 256);
-  fgrad.addColorStop(0, 'rgba(0,0,0,0)'); fgrad.addColorStop(0.35, 'rgba(0,0,0,0.04)'); fgrad.addColorStop(1, 'rgba(0,0,0,0.56)');
+  fgrad.addColorStop(0, 'rgba(0,0,0,0.03)'); fgrad.addColorStop(0.35, 'rgba(0,0,0,0.04)'); fgrad.addColorStop(1, 'rgba(0,0,0,0.6)');
   fg.fillStyle = fgrad; fg.fillRect(0, 0, 4, 256);
   const flag = new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(gw, gTop - gBot, 0.07), 48),
     new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(flagCv), transparent: true, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -1 }));
@@ -654,7 +654,7 @@ let activeSwatch = params.get('color') ?? 'titanium';
 function setColor(name, instant = false) {
   const c = new THREE.Color(Theme.colorways[name] ?? name);
   tinted.forEach((m) => {
-    const t = m === M.plateau ? c.clone().multiplyScalar(1.07).multiply(new THREE.Color(1.0, 1.08, 1.12)) : m === M.back ? c.clone().multiplyScalar(1.12) : m === M.logo ? c.clone().multiplyScalar(1.18) : c; // back glass: frosted, reads lighter than the anodized frame // plateau: lower env share (0.7), so a brighter base keeps it level with the ref (masked fit)
+    const t = m === M.plateau ? c.clone().multiplyScalar(1.07).multiply(new THREE.Color(1.0, 1.08, 1.12)) : m === M.back ? c.clone().multiplyScalar(1.15) : m === M.logo ? c.clone().multiplyScalar(1.18) : c; // back glass: frosted, reads lighter than the anodized frame // plateau: lower env share (0.7), so a brighter base keeps it level with the ref (masked fit)
     if (instant) m.color.copy(t);
     else gsap.to(m.color, { r: t.r, g: t.g, b: t.b, duration: 0.8, ease: 'power2.inOut' });
   });
