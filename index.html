@@ -34,6 +34,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { VignetteShader } from 'three/addons/shaders/VignetteShader.js';
+import { toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { gsap } from 'gsap';
 
 /* =====================================================================
@@ -51,7 +52,7 @@ const Tokens = {
 
 const Theme = {
   backdrop: { light: Tokens.paper, dark: '#000000' }, // dark = pure black, 1:1 with Apple's product shots
-  colorways: { titanium: '#8a8781', silver: '#d6d6d8', ink: '#2a2c30', cosmic: '#dc7a3c', shade: '#d81b60', peach: '#ffb08a' },
+  colorways: { titanium: '#8a8781', silver: '#d6d6d8', ink: '#2a2c30', cosmic: '#dc6e33', shade: '#d81b60', peach: '#ffb08a' },
   angles: {
     hero:  { azimuth: 150, elevation: 8 },
     front: { azimuth: 20,  elevation: 4 },
@@ -261,6 +262,7 @@ function grainTex(base, spread, repeat) {
   g.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(repeat, repeat);
+  t.colorSpace = THREE.NoColorSpace; // data texture (roughness): linear, never sRGB-decoded
   return t;
 }
 const bead = grainTex(0.85, 0.35, 6);   // multiplies material roughness
@@ -300,12 +302,15 @@ function roundedRect(w, h, r) {
   s.lineTo(x, y + r);         s.quadraticCurveTo(x, y, x + r, y);
   return s;
 }
-function slab({ w, h, d, corner, bevel = 0.015, bevelSegments = 10 }) {
-  const g = new THREE.ExtrudeGeometry(
+function slab({ w, h, d, corner, bevel = 0.015, bevelSegments = 12 }) {
+  let g = new THREE.ExtrudeGeometry(
     roundedRect(w - 2 * bevel, h - 2 * bevel, Math.max(corner - bevel, 0.001)),
-    { depth: Math.max(d - 2 * bevel, 0.0001), bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments, curveSegments: 64 }
+    { depth: Math.max(d - 2 * bevel, 0.0001), bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments, curveSegments: 48 }
   );
   g.center();
+  // Smooth subdivision look: blend normals across the bevel/corner facets (< 35 deg) so edges roll off
+  // continuously like machined aluminum, while true hard breaks stay crisp
+  g = toCreasedNormals(g, THREE.MathUtils.degToRad(35));
   return g;
 }
 const flat = (w, h, r, mat, seg = 32) => new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(w, h, r), seg), mat);
