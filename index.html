@@ -294,6 +294,9 @@ const M = {
   window:  new THREE.MeshPhysicalMaterial({ color: '#3a3b3f', metalness: 0, roughness: 0.4, clearcoat: 1, clearcoatRoughness: 0.2 }),
 };
 const tinted = [M.body, M.back, M.logo, M.ring]; // follow the colorway
+// Camera plateau: same anodized finish, tuned separately (in the ref it faces the camera and reads darker than the frame edge)
+M.plateau = M.body.clone(); M.plateau.envMapIntensity = 0.7; M.plateau.clearcoat = 0.25;
+tinted.push(M.plateau);
 
 /* =====================================================================
    4. Geometry primitives
@@ -400,7 +403,7 @@ function buildPhone() {
 
   // Full-width aluminum camera plateau: top ~29% of the back, soft step at its lower edge
   const PH = 0.29 * H;
-  const plateau = new THREE.Mesh(slab({ w: W, h: PH, d: 0.034, corner: C, bevel: 0.014, bevelSegments: 12 }), M.body);
+  const plateau = new THREE.Mesh(slab({ w: W, h: PH, d: 0.034, corner: C, bevel: 0.014, bevelSegments: 12 }), M.plateau);
   plateau.position.set(0, H / 2 - PH / 2, zB - 0.008);
   g.add(plateau);
   const zP = zB - 0.025;                                            // plateau outer surface
@@ -409,6 +412,17 @@ function buildPhone() {
   const gTop = by(0.32), gBot = by(0.972), gw = W * 0.888;
   const glass = flat(gw, gTop - gBot, 0.07, M.back, 48);
   glass.rotation.y = Math.PI; glass.position.set(0, (gTop + gBot) / 2, zB - 0.0006); g.add(glass);
+  // Studio "flag" falloff: Apple's glass darkens toward the bottom (light flagged off the lower half).
+  // Baked as a soft multiply-style gradient so the top stays bright and the bottom settles ~30% darker.
+  const flagCv = document.createElement('canvas'); flagCv.width = 4; flagCv.height = 256;
+  const fg = flagCv.getContext('2d'), fgrad = fg.createLinearGradient(0, 0, 0, 256);
+  fgrad.addColorStop(0, 'rgba(0,0,0,0)'); fgrad.addColorStop(0.35, 'rgba(0,0,0,0.04)'); fgrad.addColorStop(1, 'rgba(0,0,0,0.34)');
+  fg.fillStyle = fgrad; fg.fillRect(0, 0, 4, 256);
+  const flag = new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(gw, gTop - gBot, 0.07), 48),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(flagCv), transparent: true, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -1 }));
+  { const uv = flag.geometry.attributes.uv, pos = flag.geometry.attributes.position, hh = (gTop - gBot) / 2;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.5, (pos.getY(i) + hh) / (2 * hh)); }
+  flag.rotation.y = Math.PI; flag.position.set(0, (gTop + gBot) / 2, zB - 0.0008); g.add(flag);
 
   // Apple logo: etched into the glass, slightly glossier than the frosted panel
   const logo = appleLogo(0.155, M.logo);
@@ -419,6 +433,8 @@ function buildPhone() {
     const x = bx(fx), y = by(fy);
     const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.083, 0.03, 96), M.ring);
     ring.rotation.x = Math.PI / 2; ring.position.set(x, y, zP - 0.013); g.add(ring);
+    const bevelRing = new THREE.Mesh(new THREE.TorusGeometry(0.0812, 0.0042, 20, 128), M.ring); // polished diamond-cut outer chamfer
+    bevelRing.position.set(x, y, zP - 0.0275); g.add(bevelRing);
     const lip = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.006, 16, 96), M.ring); // chamfered inner lip
     lip.position.set(x, y, zP - 0.028); g.add(lip);
     const cover = new THREE.Mesh(new THREE.CylinderGeometry(0.066, 0.066, 0.03, 96), M.lens);
