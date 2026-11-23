@@ -244,7 +244,7 @@ const composer = new EffectComposer(renderer);
 composer.setPixelRatio(renderer.getPixelRatio());
 composer.setSize(innerWidth, innerHeight);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.1, 0.25, 0.98); // only the hottest glints glow (ref has no halo)
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.0, 0.2, 0.98); // only the hottest glints glow (ref has no halo)
 composer.addPass(bloom);
 const vignette = new ShaderPass(VignetteShader);
 vignette.uniforms.offset.value = 1.0;
