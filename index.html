@@ -42,6 +42,15 @@ import { gsap } from 'gsap';
 ===================================================================== */
 const params = new URLSearchParams(location.search);
 const STILL = params.has('still'); // deterministic mode for agents / screenshots
+// Quality: ?quality=low|high. Auto-low on weak mobile GPUs (e.g. Adreno 3xx-5xx, Mali-4xx/T, PowerVR) so phones like the Galaxy M02s stay smooth.
+const LOW = (() => {
+  const q = params.get('quality'); if (q) return q === 'low';
+  try { const gl = document.createElement('canvas').getContext('webgl'); const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
+    const r = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '';
+    return /Adreno \(TM\) [345]\d\d|Mali-(4|T)|PowerVR/i.test(r) || (navigator.deviceMemory && navigator.deviceMemory <= 2);
+  } catch { return false; }
+})();
+const SEG = LOW ? 0.5 : 1; // geometry detail multiplier
 
 // Tokens lifted from shifatmasud-framer.vercel.app
 const Tokens = {
@@ -136,13 +145,13 @@ function make(tag, style, props = {}) {
 ===================================================================== */
 const canvas = document.getElementById('stage');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, LOW ? 1 : 2));
 renderer.setSize(innerWidth, innerHeight, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.NeutralToneMapping; // ref check: AgX muddied cosmic orange; Neutral keeps Apple's hues true
 const EXPOSURE = 0.68;
 renderer.toneMappingExposure = EXPOSURE;
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = !LOW; // low: dark mode shows no shadow anyway
 renderer.shadowMap.type = THREE.VSMShadowMap;
 
 const scene = new THREE.Scene();
@@ -227,7 +236,7 @@ function syncRig() {
 const shadowCaster = new THREE.DirectionalLight(0xffffff, 0);
 shadowCaster.position.set(-0.6, 6, 0.6);
 shadowCaster.castShadow = true;
-shadowCaster.shadow.mapSize.set(2048, 2048);
+shadowCaster.shadow.mapSize.set(LOW ? 512 : 2048, LOW ? 512 : 2048);
 shadowCaster.shadow.radius = 18;
 shadowCaster.shadow.blurSamples = 24;
 Object.assign(shadowCaster.shadow.camera, { left: -1.2, right: 1.2, top: 1.2, bottom: -1.2, near: 1, far: 12 });
@@ -297,6 +306,7 @@ const tinted = [M.body, M.back, M.logo, M.ring]; // follow the colorway
 // Camera plateau: same anodized finish, tuned separately (in the ref it faces the camera and reads darker than the frame edge)
 M.plateau = M.body.clone(); M.plateau.envMapIntensity = 0.7; M.plateau.clearcoat = 0.25;
 tinted.push(M.plateau);
+if (LOW) { M.lensCore.iridescence = 0; M.lens.iridescence = 0; } // iridescence is the costliest lens term
 
 /* =====================================================================
    4. Geometry primitives
@@ -313,7 +323,7 @@ function roundedRect(w, h, r) {
 function slab({ w, h, d, corner, bevel = 0.015, bevelSegments = 12 }) {
   let g = new THREE.ExtrudeGeometry(
     roundedRect(w - 2 * bevel, h - 2 * bevel, Math.max(corner - bevel, 0.001)),
-    { depth: Math.max(d - 2 * bevel, 0.0001), bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments, curveSegments: 48 }
+    { depth: Math.max(d - 2 * bevel, 0.0001), bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: Math.max(3, Math.round(bevelSegments * SEG)), curveSegments: Math.round(48 * SEG) }
   );
   g.center();
   // Smooth subdivision look: blend normals across the bevel/corner facets (< 35 deg) so edges roll off
@@ -431,13 +441,13 @@ function buildPhone() {
   // Three big lenses in a triangle with thick anodized rings (ring color = body color)
   const lens = (fx, fy) => {
     const x = bx(fx), y = by(fy);
-    const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.083, 0.03, 96), M.ring);
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.083, 0.03, 96 * SEG), M.ring);
     ring.rotation.x = Math.PI / 2; ring.position.set(x, y, zP - 0.013); g.add(ring);
-    const bevelRing = new THREE.Mesh(new THREE.TorusGeometry(0.0812, 0.0042, 20, 128), M.ring); // polished diamond-cut outer chamfer
+    const bevelRing = new THREE.Mesh(new THREE.TorusGeometry(0.0812, 0.0042, 20 * SEG, 128 * SEG), M.ring); // polished diamond-cut outer chamfer
     bevelRing.position.set(x, y, zP - 0.0275); g.add(bevelRing);
-    const lip = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.006, 16, 96), M.ring); // chamfered inner lip
+    const lip = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.006, 16 * SEG, 96 * SEG), M.ring); // chamfered inner lip
     lip.position.set(x, y, zP - 0.028); g.add(lip);
-    const cover = new THREE.Mesh(new THREE.CylinderGeometry(0.066, 0.066, 0.03, 96), M.lens);
+    const cover = new THREE.Mesh(new THREE.CylinderGeometry(0.066, 0.066, 0.03, 96 * SEG), M.lens);
     cover.rotation.x = Math.PI / 2; cover.position.set(x, y, zP - 0.0135); g.add(cover);
     // optics seen through the cover glass: concentric rings + small bright element
     const z = zP - 0.0287;
