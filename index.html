@@ -68,6 +68,7 @@ const Theme = {
     back:  { azimuth: 180, elevation: 4 },
     side:  { azimuth: 95,  elevation: 2 },
     top:   { azimuth: 160, elevation: 60 },
+    closeup: { azimuth: 180, elevation: -30, dist: 0.75, lift: 0.28, fov: 30 }, // fit to Apple's camera close-up (low, looking up the back at the plateau)
   },
   fov: 18,
   floatBase: 0.06,
@@ -106,7 +107,7 @@ const Style = {
   body: { padding: '2px 16px 16px', display: 'flex', flexDirection: 'column', gap: '14px' },
   group: { display: 'flex', flexDirection: 'column', gap: '8px' },
   label: { font: `500 11px/1 ${Tokens.font}`, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: 0.55 },
-  segment: { display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '2px', padding: '3px', borderRadius: '12px' },
+  segment: { display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '2px', padding: '3px', borderRadius: '12px' },
   swatchRow: { display: 'flex', gap: '10px', alignItems: 'center', padding: '2px' },
   actions: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' },
   btn: {
@@ -536,7 +537,7 @@ const target = new THREE.Vector3(0, 0.5, 0);
 const controls = new OrbitControls(camera, canvas);
 Object.assign(controls, {
   enableDamping: true, dampingFactor: 0.06, enablePan: false,
-  minDistance: 2.2, maxDistance: 12, maxPolarAngle: Math.PI / 2 - 0.04,
+  minDistance: 0.5, maxDistance: 12, maxPolarAngle: Math.PI / 2 - 0.04,
   rotateSpeed: 0.7, zoomSpeed: 0.6,
 });
 
@@ -562,6 +563,9 @@ function setProduct(obj) {
 ===================================================================== */
 function cameraPosFor(angle, padding = 1.3) {
   const a = Theme.angles[angle] ?? angle;
+  if (a.dist) return new THREE.Vector3().setFromSphericalCoords(
+    a.dist, THREE.MathUtils.degToRad(90 - a.elevation), THREE.MathUtils.degToRad(a.azimuth)
+  ).add(viewTarget(a));
   const radius = Math.max(productHeight, 1) * 0.55;
   const vF = THREE.MathUtils.degToRad(camera.fov);
   const hF = 2 * Math.atan(Math.tan(vF / 2) * camera.aspect);
@@ -571,11 +575,20 @@ function cameraPosFor(angle, padding = 1.3) {
   ).add(target);
 }
 
+const baseTarget = new THREE.Vector3();
+function viewTarget(a) { return baseTarget.clone().setY(baseTarget.y + (a.lift ?? 0)); }
+function applyView(a) { // per-view fov + aim point (close-up aims at the camera plateau)
+  camera.fov = a.fov ?? Theme.fov; camera.updateProjectionMatrix();
+  target.copy(viewTarget(a)); controls.target.copy(target);
+}
 let tweening = false;
 let currentAngle = params.get('angle') ?? 'hero';
 function goTo(angle, duration = 1.4) {
   currentAngle = angle;
   updateSummary();
+  const a = Theme.angles[angle] ?? angle;
+  if (!baseTarget.lengthSq()) baseTarget.copy(target);
+  applyView(a);
   const to = cameraPosFor(angle);
   if (duration === 0) { camera.position.copy(to); camera.lookAt(target); return null; }
   tweening = true;
