@@ -630,8 +630,9 @@ let activeSwatch = params.get('color') ?? 'titanium';
 function setColor(name, instant = false) {
   const c = new THREE.Color(Theme.colorways[name] ?? name);
   tinted.forEach((m) => {
-    if (instant) m.color.copy(c);
-    else gsap.to(m.color, { r: c.r, g: c.g, b: c.b, duration: 0.8, ease: 'power2.inOut' });
+    const t = m === M.plateau ? c.clone().multiplyScalar(0.8) : c; // plateau faces the camera: reads ~20% deeper than the frame in the ref
+    if (instant) m.color.copy(t);
+    else gsap.to(m.color, { r: t.r, g: t.g, b: t.b, duration: 0.8, ease: 'power2.inOut' });
   });
   activeSwatch = name;
   lastInteract = performance.now();
