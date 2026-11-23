@@ -155,7 +155,7 @@ const camera = new THREE.PerspectiveCamera(Theme.fov, innerWidth / innerHeight, 
 const ThreePoint = {
   // Positions/aims fit numerically to Apple's cosmic orange back shot (18+ tuning passes, SwiftShader renders vs ref)
   key:  { name: 'key',  pos: [-0.4, 1.0, 0.8],  aim: [0, 0, 0], size: [1.8, 1.8],  intensity: 6 },   // close above the top edge: Apple's top-to-bottom falloff
-  fill: { name: 'fill', pos: [0.2, 1.6, 2.6],   size: [2.6, 2.6],  intensity: 1.5, grade: 0.7 }, // big frontal-top card, hotter at the top: glass reflection falls off downward
+  fill: { name: 'fill', pos: [0.2, 1.6, 2.6],   size: [2.6, 2.6],  intensity: 1.5, grade: 0.6 }, // big frontal-top card, hotter at the top: glass reflection falls off downward
   rim:  { name: 'rim',  pos: [-2.2, 1.2, -1.0], size: [0.35, 2.6], intensity: 16 },  // left-behind strip: lights the left frame edge like the ref
 };
 const ModeRecipe = {
@@ -630,7 +630,7 @@ let activeSwatch = params.get('color') ?? 'titanium';
 function setColor(name, instant = false) {
   const c = new THREE.Color(Theme.colorways[name] ?? name);
   tinted.forEach((m) => {
-    const t = m === M.plateau ? c.clone().multiplyScalar(1.07) : m === M.back ? c.clone().multiplyScalar(1.12) : m === M.logo ? c.clone().multiplyScalar(1.14) : c; // back glass: frosted, reads lighter than the anodized frame // plateau: lower env share (0.7), so a brighter base keeps it level with the ref (masked fit)
+    const t = m === M.plateau ? c.clone().multiplyScalar(1.07).multiply(new THREE.Color(1.0, 1.08, 1.12)) : m === M.back ? c.clone().multiplyScalar(1.12) : m === M.logo ? c.clone().multiplyScalar(1.18) : c; // back glass: frosted, reads lighter than the anodized frame // plateau: lower env share (0.7), so a brighter base keeps it level with the ref (masked fit)
     if (instant) m.color.copy(t);
     else gsap.to(m.color, { r: t.r, g: t.g, b: t.b, duration: 0.8, ease: 'power2.inOut' });
   });
