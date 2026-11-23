@@ -325,7 +325,7 @@ const flat = (w, h, r, mat, seg = 32) => new THREE.Mesh(new THREE.ShapeGeometry(
 const disc = (r, mat, seg = 24) => new THREE.Mesh(new THREE.CircleGeometry(r, seg), mat);
 
 // Apple logo from SVG path (24x24 viewBox), scaled to `width`, centered, Y flipped from SVG space
-const APPLE_PATH = 'M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701';
+const APPLE_PATH = 'M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.830-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701';
 function appleLogo(width, mat) {
   const data = new SVGLoader().parse(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="${APPLE_PATH}"/></svg>`);
   const shapes = data.paths.flatMap((p) => SVGLoader.createShapes(p));
@@ -416,7 +416,7 @@ function buildPhone() {
   // Baked as a soft multiply-style gradient so the top stays bright and the bottom settles ~30% darker.
   const flagCv = document.createElement('canvas'); flagCv.width = 4; flagCv.height = 256;
   const fg = flagCv.getContext('2d'), fgrad = fg.createLinearGradient(0, 0, 0, 256);
-  fgrad.addColorStop(0, 'rgba(0,0,0,0)'); fgrad.addColorStop(0.35, 'rgba(0,0,0,0.04)'); fgrad.addColorStop(1, 'rgba(0,0,0,0.34)');
+  fgrad.addColorStop(0, 'rgba(0,0,0,0)'); fgrad.addColorStop(0.35, 'rgba(0,0,0,0.04)'); fgrad.addColorStop(1, 'rgba(0,0,0,0.42)');
   fg.fillStyle = fgrad; fg.fillRect(0, 0, 4, 256);
   const flag = new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(gw, gTop - gBot, 0.07), 48),
     new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(flagCv), transparent: true, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -1 }));
@@ -630,7 +630,7 @@ let activeSwatch = params.get('color') ?? 'titanium';
 function setColor(name, instant = false) {
   const c = new THREE.Color(Theme.colorways[name] ?? name);
   tinted.forEach((m) => {
-    const t = m === M.plateau ? c.clone().multiplyScalar(1.25) : c; // plateau: lower env share (0.7), so a brighter base keeps it level with the ref (masked fit)
+    const t = m === M.plateau ? c.clone().multiplyScalar(1.25) : m === M.back ? c.clone().multiplyScalar(1.12) : c; // back glass: frosted, reads lighter than the anodized frame // plateau: lower env share (0.7), so a brighter base keeps it level with the ref (masked fit)
     if (instant) m.color.copy(t);
     else gsap.to(m.color, { r: t.r, g: t.g, b: t.b, duration: 0.8, ease: 'power2.inOut' });
   });
