@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Shifat / Studio - live product scene</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #121315; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.187.0/examples/jsm/",
+    "gsap": "https://cdn.jsdelivr.net/npm/gsap@3.12.5/+esm"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+import { SVGLoader } from 'three/addons/loaders/SVGLoader.js';
+import { gsap } from 'gsap';
+
+/* =====================================================================
+   0. Tokens + config (style objects, no CSS soup)
+===================================================================== */
+const params = new URLSearchParams(location.search);
+const STILL = params.has('still'); // deterministic mode for agents / screenshots
+
+// Tokens lifted from shifatmasud-framer.vercel.app
+const Tokens = {
+  ink: '#121315', paper: '#fafafa', muted: '#5f646b', muted2: '#a9adb3',
+  hairline: 'rgba(18, 19, 21, 0.07)',
+  font: 'Inter, "Inter Placeholder", -apple-system, sans-serif', tracking: '-0.02em',
+};
+
+const Theme = {
+  backdrop: { light: Tokens.paper, dark: Tokens.ink },
+  colorways: { titanium: '#8a8781', silver: '#d6d6d8', ink: '#2a2c30', shade: '#d81b60', peach: '#ffb08a' },
+  angles: {
+    hero:  { azimuth: 150, elevation: 8 },
+    front: { azimuth: 20,  elevation: 4 },
+    back:  { azimuth: 180, elevation: 4 },
+    side:  { azimuth: 95,  elevation: 2 },
+    top:   { azimuth: 160, elevation: 60 },
+  },
+  fov: 18,
+  floatBase: 0.06,
+};
+
+const Skin = {
+  dark: {
+    sheetBg: 'rgba(28, 29, 32, 0.78)', sheetBorder: 'rgba(250, 250, 250, 0.08)', text: Tokens.paper,
+    hover: 'rgba(250, 250, 250, 0.08)', activeBg: Tokens.paper, activeText: Tokens.ink,
+    grip: 'rgba(250, 250, 250, 0.22)', swatchRing: 'rgba(250, 250, 250, 0.18)', swatchOn: Tokens.paper,
+    hint: Tokens.muted2, track: 'rgba(250, 250, 250, 0.06)',
+    primaryBg: Tokens.paper, primaryText: Tokens.ink, shadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+  },
+  light: {
+    sheetBg: 'rgba(250, 250, 250, 0.82)', sheetBorder: Tokens.hairline, text: Tokens.ink,
+    hover: Tokens.hairline, activeBg: Tokens.ink, activeText: Tokens.paper,
+    grip: 'rgba(18, 19, 21, 0.16)', swatchRing: 'rgba(18, 19, 21, 0.12)', swatchOn: Tokens.ink,
+    hint: Tokens.muted, track: 'rgba(18, 19, 21, 0.05)',
+    primaryBg: Tokens.ink, primaryText: Tokens.paper, shadow: '0 20px 60px rgba(18, 19, 21, 0.12)',
+  },
+};
+
+const Style = {
+  sheet: {
+    position: 'fixed', left: '50%', bottom: '12px', width: 'min(400px, calc(100vw - 24px))',
+    boxSizing: 'border-box', borderRadius: '22px', overflow: 'hidden', zIndex: 10,
+    backdropFilter: 'blur(28px) saturate(1.5)', WebkitBackdropFilter: 'blur(28px) saturate(1.5)',
+    font: `500 13px/1 ${Tokens.font}`, letterSpacing: Tokens.tracking, userSelect: 'none',
+    transition: 'background .5s, color .5s, border-color .5s, box-shadow .5s', willChange: 'transform',
+  },
+  header: { padding: '8px 16px 14px', cursor: 'grab', touchAction: 'none', outline: 'none' },
+  grip: { width: '36px', height: '5px', borderRadius: '3px', margin: '0 auto 12px', transition: 'background .5s, width .3s' },
+  headRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  title: { font: `600 15px/1 ${Tokens.font}`, letterSpacing: '-0.035em' },
+  summary: { font: `500 12px/1 ${Tokens.font}`, opacity: 0.6, textTransform: 'capitalize' },
+  body: { padding: '2px 16px 16px', display: 'flex', flexDirection: 'column', gap: '14px' },
+  group: { display: 'flex', flexDirection: 'column', gap: '8px' },
+  label: { font: `500 11px/1 ${Tokens.font}`, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: 0.55 },
+  segment: { display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '2px', padding: '3px', borderRadius: '12px' },
+  swatchRow: { display: 'flex', gap: '10px', alignItems: 'center', padding: '2px' },
+  actions: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' },
+  btn: {
+    border: 'none', background: 'transparent', cursor: 'pointer', color: 'inherit',
+    padding: '9px 0', borderRadius: '9px', font: 'inherit', letterSpacing: 'inherit', textAlign: 'center',
+    transition: 'background .25s, color .25s, transform .35s cubic-bezier(.34,1.56,.64,1)',
+  },
+  primary: {
+    border: 'none', cursor: 'pointer', padding: '12px 0', borderRadius: '12px',
+    font: `600 13px/1 ${Tokens.font}`, letterSpacing: Tokens.tracking,
+    transition: 'transform .35s cubic-bezier(.34,1.56,.64,1), background .4s, color .4s',
+  },
+  swatch: {
+    width: '20px', height: '20px', borderRadius: '50%', cursor: 'pointer', padding: 0, margin: '0 3px',
+    borderWidth: '2px', borderStyle: 'solid',
+    transition: 'transform .35s cubic-bezier(.34,1.56,.64,1), border-color .25s',
+  },
+  flash: { position: 'fixed', inset: 0, background: Tokens.paper, opacity: 0, pointerEvents: 'none', zIndex: 20 },
+  wordmark: {
+    position: 'fixed', top: '22px', left: '24px', zIndex: 10, pointerEvents: 'none',
+    font: `600 15px/1 ${Tokens.font}`, letterSpacing: '-0.035em', transition: 'color .5s',
+  },
+  hint: {
+    position: 'fixed', top: '24px', right: '24px', zIndex: 10, pointerEvents: 'none',
+    font: `500 12px/1 ${Tokens.font}`, letterSpacing: Tokens.tracking, transition: 'opacity 1s, color .5s',
+  },
+};
+function make(tag, style, props = {}) {
+  const n = Object.assign(document.createElement(tag), props);
+  Object.assign(n.style, style);
+  return n;
+}
+
+/* =====================================================================
+   1. Renderer
+===================================================================== */
+const canvas = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight, false);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NeutralToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.VSMShadowMap;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(Theme.fov, innerWidth / innerHeight, 0.05, 100);
+
+/* =====================================================================
+   2. Three-point lighting: KEY, FILL, RIM (the only lights in the scene)
+      Camera sits on +Z in this frame. The rig follows the camera azimuth.
+===================================================================== */
+const ThreePoint = {
+  key:  { name: 'key',  pos: [-2.4, 2.4, 2.6],  size: [1.8, 1.8],  intensity: 6 },   // front-left, above: shape
+  fill: { name: 'fill', pos: [2.8, 0.6, 2.4],   size: [2.6, 2.6],  intensity: 1.5 }, // front-right, low: lifts shadows
+  rim:  { name: 'rim',  pos: [1.8, 1.4, -2.6],  size: [0.35, 2.6], intensity: 16 },  // behind: edge separation
+};
+const ModeRecipe = {
+  dark:  { room: 0.0,  floor: 0.0,  key: 1.0, fill: 0.8, rim: 1.0, mirror: 1.6 },
+  light: { room: 0.18, floor: 0.35, key: 0.8, fill: 1.0, rim: 0.7, mirror: 1.6 },
+};
+
+// Reflections show the SAME three softboxes (one source of truth)
+function buildStudioEnv(mode) {
+  const r = ModeRecipe[mode];
+  const env = new THREE.Scene();
+  env.add(new THREE.Mesh(new THREE.BoxGeometry(20, 20, 20),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color().setScalar(r.room), side: THREE.BackSide })));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshBasicMaterial({ color: new THREE.Color().setScalar(r.floor) }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = -3;
+  env.add(floor);
+  Object.values(ThreePoint).forEach((L) => {
+    const p = new THREE.Vector3(...L.pos), s = 7 / p.length();
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(L.size[0] * s, L.size[1] * s),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color().setScalar(L.intensity * r.mirror * r[L.name]), side: THREE.DoubleSide }));
+    m.position.copy(p.normalize().multiplyScalar(7));
+    m.lookAt(0, 0, 0);
+    env.add(m);
+  });
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const tex = pmrem.fromScene(env, 0.02).texture;
+  pmrem.dispose();
+  return tex;
+}
+
+RectAreaLightUniformsLib.init();
+const rig = new THREE.Group();
+scene.add(rig);
+const lights = {};
+Object.values(ThreePoint).forEach((L) => {
+  const l = new THREE.RectAreaLight(0xffffff, L.intensity, L.size[0], L.size[1]);
+  l.position.set(...L.pos);
+  l.lookAt(0, 0, 0);
+  l.userData.base = L.intensity;
+  rig.add(l);
+  lights[L.name] = l;
+});
+function syncRig() {
+  rig.position.copy(target);
+  const az = Math.atan2(camera.position.x - target.x, camera.position.z - target.z);
+  rig.rotation.y = az;
+  scene.environmentRotation.set(0, az, 0);
+}
+
+// Shadow caster only (intensity 0): no added light, just the soft contact shadow
+const shadowCaster = new THREE.DirectionalLight(0xffffff, 0);
+shadowCaster.position.set(-0.6, 6, 0.6);
+shadowCaster.castShadow = true;
+shadowCaster.shadow.mapSize.set(2048, 2048);
+shadowCaster.shadow.radius = 18;
+shadowCaster.shadow.blurSamples = 24;
+Object.assign(shadowCaster.shadow.camera, { left: -1.2, right: 1.2, top: 1.2, bottom: -1.2, near: 1, far: 12 });
+scene.add(shadowCaster);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.ShadowMaterial({ opacity: 0.1 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+const envMaps = { light: buildStudioEnv('light'), dark: buildStudioEnv('dark') };
+
+/* =====================================================================
+   3. Materials
+===================================================================== */
+const M = {
+  // anodized aluminum unibody: color reads, not a mirror (anisotropy = brushed highlight)
+  body:    new THREE.MeshPhysicalMaterial({ color: Theme.colorways.titanium, metalness: 0.55, roughness: 0.42, anisotropy: 0.5, clearcoat: 0.3, clearcoatRoughness: 0.4 }),
+  // Ceramic Shield back panel: matte, frosted
+  back:    new THREE.MeshPhysicalMaterial({ color: Theme.colorways.titanium, metalness: 0, roughness: 0.65, clearcoat: 1, clearcoatRoughness: 0.45 }),
+  // Apple logo: tone-on-tone, a touch glossier than the frosted glass
+  logo:    new THREE.MeshPhysicalMaterial({ color: Theme.colorways.titanium, metalness: 0.1, roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.08 }),
+  ring:    new THREE.MeshPhysicalMaterial({ color: Theme.colorways.titanium, metalness: 1, roughness: 0.22, anisotropy: 0.3 }), // anodized, follows colorway
+  lensCore:new THREE.MeshPhysicalMaterial({ color: '#151a2a', metalness: 0.4, roughness: 0.1, clearcoat: 1 }),
+  lens:    new THREE.MeshPhysicalMaterial({ color: '#07080c', metalness: 0, roughness: 0.03, clearcoat: 1, clearcoatRoughness: 0, iridescence: 0.25, iridescenceIOR: 1.5 }),
+  lensIn:  new THREE.MeshPhysicalMaterial({ color: '#0b0c10', metalness: 0.2, roughness: 0.25 }),
+  sapphire:new THREE.MeshPhysicalMaterial({ color: '#202126', metalness: 0.1, roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0.02 }),
+  screen:  new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false }), // unlit: only its own light
+  island:  new THREE.MeshBasicMaterial({ color: 0x000000 }),                     // Dynamic Island, unlit black
+  bezel:   new THREE.MeshPhysicalMaterial({ color: '#000000', metalness: 0, roughness: 0.3 }),
+  hole:    new THREE.MeshBasicMaterial({ color: '#050505' }),
+  flash:   new THREE.MeshPhysicalMaterial({ color: '#f1ead6', roughness: 0.35, clearcoat: 1, clearcoatRoughness: 0.1 }),
+  window:  new THREE.MeshPhysicalMaterial({ color: '#3a3b3f', metalness: 0, roughness: 0.4, clearcoat: 1, clearcoatRoughness: 0.2 }),
+};
+const tinted = [M.body, M.back, M.logo, M.ring]; // follow the colorway
+
+/* =====================================================================
+   4. Geometry primitives
+===================================================================== */
+function roundedRect(w, h, r) {
+  const s = new THREE.Shape(), x = -w / 2, y = -h / 2;
+  s.moveTo(x + r, y);
+  s.lineTo(x + w - r, y);     s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  s.lineTo(x + r, y + h);     s.quadraticCurveTo(x, y + h, x, y + h - r);
+  s.lineTo(x, y + r);         s.quadraticCurveTo(x, y, x + r, y);
+  return s;
+}
+function slab({ w, h, d, corner, bevel = 0.015, bevelSegments = 10 }) {
+  const g = new THREE.ExtrudeGeometry(
+    roundedRect(w - 2 * bevel, h - 2 * bevel, Math.max(corner - bevel, 0.001)),
+    { depth: Math.max(d - 2 * bevel, 0.0001), bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments, curveSegments: 64 }
+  );
+  g.center();
+  return g;
+}
+const flat = (w, h, r, mat, seg = 32) => new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(w, h, r), seg), mat);
+const disc = (r, mat, seg = 24) => new THREE.Mesh(new THREE.CircleGeometry(r, seg), mat);
+
+// Apple logo from SVG path (24x24 viewBox), scaled to `width`, centered, Y flipped from SVG space
+const APPLE_PATH = 'M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701';
+function appleLogo(width, mat) {
+  const data = new SVGLoader().parse(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="${APPLE_PATH}"/></svg>`);
+  const shapes = data.paths.flatMap((p) => SVGLoader.createShapes(p));
+  const geo = new THREE.ShapeGeometry(shapes, 24);
+  geo.scale(1, -1, 1);
+  // the -Y mirror flips triangle winding; swap back so the logo is lit from the correct side
+  const idx = geo.index.array;
+  for (let i = 0; i < idx.length; i += 3) { const t = idx[i + 1]; idx[i + 1] = idx[i + 2]; idx[i + 2] = t; }
+  geo.index.needsUpdate = true;
+  geo.computeBoundingBox();
+  const bb = geo.boundingBox, s = width / (bb.max.x - bb.min.x);
+  geo.translate(-(bb.min.x + bb.max.x) / 2, -(bb.min.y + bb.max.y) / 2, 0);
+  geo.scale(s, s, 1);
+  return new THREE.Mesh(geo, mat);
+}
+
+function wallpaper(w, h) {
+  const c = make('canvas', {}, { width: 512, height: Math.round(512 * h / w) });
+  const g = c.getContext('2d');
+  g.fillStyle = Tokens.ink; g.fillRect(0, 0, c.width, c.height);
+  const blob = (x, y, r, col) => {
+    const grd = g.createRadialGradient(x, y, 0, x, y, r);
+    grd.addColorStop(0, col); grd.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grd; g.fillRect(0, 0, c.width, c.height);
+  };
+  blob(c.width * 0.25, c.height * 0.3, c.width * 0.9, 'rgba(255, 77, 148, 0.95)');
+  blob(c.width * 0.85, c.height * 0.65, c.width * 0.8, 'rgba(255, 176, 138, 0.85)');
+  blob(c.width * 0.4, c.height * 0.95, c.width * 0.7, 'rgba(168, 85, 247, 0.75)');
+  // lock-screen clock, like Apple's hero shots
+  g.fillStyle = 'rgba(255,255,255,0.92)';
+  g.textAlign = 'center';
+  g.font = `600 ${Math.round(c.width * 0.22)}px Inter, -apple-system, sans-serif`;
+  g.fillText('9:41', c.width / 2, c.height * 0.2);
+  g.font = `500 ${Math.round(c.width * 0.045)}px Inter, -apple-system, sans-serif`;
+  g.fillText('Monday, November 23', c.width / 2, c.height * 0.095);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.repeat.set(1 / w, 1 / h); // ShapeGeometry UVs are in shape units -> remap to 0..1
+  t.offset.set(0.5, 0.5);
+  return t;
+}
+
+/* =====================================================================
+   5. Default product: phone with Apple-style details
+      Front faces +Z. Seen from the back, +X appears on the LEFT.
+===================================================================== */
+function buildPhone() {
+  const W = 0.72, H = 1.47, D = 0.078, C = 0.12;
+  const zF = D / 2, zB = -D / 2;
+  const g = new THREE.Group();
+
+  // Unibody
+  g.add(new THREE.Mesh(slab({ w: W, h: H, d: D, corner: C, bevel: 0.022, bevelSegments: 14 }), M.body));
+
+  // ---- Front ----
+  const bezel = flat(W - 0.024, H - 0.024, C - 0.012, M.bezel, 64);
+  bezel.position.z = zF + 0.0006; g.add(bezel);
+  const sw = W - 0.05, sh = H - 0.05;
+  M.screen.map = wallpaper(sw, sh);
+  const screen = flat(sw, sh, C - 0.025, M.screen, 64);
+  screen.position.z = zF + 0.0012; g.add(screen);
+  const island = flat(0.17, 0.05, 0.025, M.island);               // Dynamic Island
+  island.position.set(0, H / 2 - 0.085, zF + 0.0016); g.add(island);
+  const ear = flat(0.11, 0.005, 0.0025, M.hole);                   // earpiece slit
+  ear.position.set(0, H / 2 - 0.018, zF + 0.0016); g.add(ear);
+
+  // ---- Back (measured from Apple's official iPhone 17 Pro product images) ----
+  // Image coords -> model: fx = fraction from left of the BACK view, fy = fraction from top.
+  // Seen from the back, image-left is +X.
+  const bx = (fx) => W / 2 - fx * W;
+  const by = (fy) => H / 2 - fy * H;
+
+  // Full-width aluminum camera plateau: top ~29% of the back, soft step at its lower edge
+  const PH = 0.29 * H;
+  const plateau = new THREE.Mesh(slab({ w: W, h: PH, d: 0.034, corner: C, bevel: 0.014, bevelSegments: 12 }), M.body);
+  plateau.position.set(0, H / 2 - PH / 2, zB - 0.008);
+  g.add(plateau);
+  const zP = zB - 0.025;                                            // plateau outer surface
+
+  // Ceramic Shield glass panel: inset, frosted, same hue but softer/lighter
+  const gTop = by(0.32), gBot = by(0.972), gw = W * 0.888;
+  const glass = flat(gw, gTop - gBot, 0.07, M.back, 48);
+  glass.rotation.y = Math.PI; glass.position.set(0, (gTop + gBot) / 2, zB - 0.0006); g.add(glass);
+
+  // Apple logo: etched into the glass, slightly glossier than the frosted panel
+  const logo = appleLogo(0.155, M.logo);
+  logo.rotation.y = Math.PI; logo.position.set(0, by(0.64), zB - 0.0012); g.add(logo);
+
+  // Three big lenses in a triangle with thick anodized rings (ring color = body color)
+  const lens = (fx, fy) => {
+    const x = bx(fx), y = by(fy);
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.083, 0.03, 96), M.ring);
+    ring.rotation.x = Math.PI / 2; ring.position.set(x, y, zP - 0.013); g.add(ring);
+    const lip = new THREE.Mesh(new THREE.TorusGeometry(0.068, 0.006, 16, 96), M.ring); // chamfered inner lip
+    lip.position.set(x, y, zP - 0.028); g.add(lip);
+    const cover = new THREE.Mesh(new THREE.CylinderGeometry(0.066, 0.066, 0.03, 96), M.lens);
+    cover.rotation.x = Math.PI / 2; cover.position.set(x, y, zP - 0.0135); g.add(cover);
+    // optics seen through the cover glass: concentric rings + small bright element
+    const z = zP - 0.0287;
+    [[0.05, M.lensIn], [0.036, M.lens], [0.022, M.lensIn], [0.009, M.lensCore]].forEach(([r, m], i) => {
+      const d = disc(r, m, 64); d.rotation.y = Math.PI; d.position.set(x, y, z - i * 0.0002); g.add(d);
+    });
+  };
+  lens(0.195, 0.083); lens(0.46, 0.147); lens(0.195, 0.21);
+
+  // Flash (top right), mic dot, LiDAR (black, lower right)
+  const flashM = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.004, 48), M.flash);
+  flashM.rotation.x = Math.PI / 2; flashM.position.set(bx(0.81), by(0.08), zP - 0.0015); g.add(flashM);
+  const mic = disc(0.005, M.hole, 16);
+  mic.rotation.y = Math.PI; mic.position.set(bx(0.81), by(0.147), zP - 0.0006); g.add(mic);
+  const lidar = disc(0.03, M.hole, 48);
+  lidar.rotation.y = Math.PI; lidar.position.set(bx(0.81), by(0.215), zP - 0.0006); g.add(lidar);
+
+  // ---- Sides ----
+  const button = (x, y, h, mat = M.body, depth = 0.028, out = 0.004) => {
+    const b = new THREE.Mesh(slab({ w: 0.012, h, d: depth, corner: Math.min(0.006, h / 2), bevel: 0.004 }), mat);
+    b.position.set(x + Math.sign(x) * out, y, 0);
+    g.add(b);
+  };
+  const L = -W / 2, R = W / 2;
+  button(L, 0.43, 0.06);                 // Action button
+  button(L, 0.3, 0.1);                   // volume up
+  button(L, 0.17, 0.1);                  // volume down
+  button(R, 0.3, 0.17);                  // side button
+  button(R, -0.12, 0.11, M.sapphire, 0.026, 0.0005); // Camera Control: flush sapphire
+
+  // ---- Bottom edge: USB-C, speaker + mic grilles ----
+  const bottom = new THREE.Group();
+  bottom.rotation.x = Math.PI / 2;       // faces -Y
+  bottom.position.y = -H / 2 - 0.0008;
+  const port = flat(0.09, 0.026, 0.013, M.hole); bottom.add(port);
+  for (let i = 0; i < 6; i++) { const h = disc(0.0055, M.hole); h.position.set(0.085 + i * 0.022, 0, 0); bottom.add(h); }
+  for (let i = 0; i < 4; i++) { const h = disc(0.0055, M.hole); h.position.set(-0.085 - i * 0.022, 0, 0); bottom.add(h); }
+  g.add(bottom);
+  // ---- Top edge: mmWave window ----
+  const top = flat(0.1, 0.03, 0.015, M.window);
+  top.rotation.x = -Math.PI / 2; top.position.set(-0.12, H / 2 + 0.0008, 0); g.add(top);
+
+  return g;
+}
+
+/* =====================================================================
+   6. Rig: pivot (alive motion) > product (normalized)
+===================================================================== */
+const pivot = new THREE.Group();
+const product = new THREE.Group();
+pivot.add(product);
+scene.add(pivot);
+let productHeight = 1;
+const target = new THREE.Vector3(0, 0.5, 0);
+
+const controls = new OrbitControls(camera, canvas);
+Object.assign(controls, {
+  enableDamping: true, dampingFactor: 0.06, enablePan: false,
+  minDistance: 2.2, maxDistance: 12, maxPolarAngle: Math.PI / 2 - 0.04,
+  rotateSpeed: 0.7, zoomSpeed: 0.6,
+});
+
+function setProduct(obj) {
+  product.clear();
+  product.position.set(0, 0, 0);
+  product.scale.setScalar(1);
+  obj.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  product.add(obj);
+  const box = new THREE.Box3().setFromObject(product);
+  const size = box.getSize(new THREE.Vector3());
+  product.scale.setScalar(1 / Math.max(size.x, size.y, size.z));
+  box.setFromObject(product);
+  const c = box.getCenter(new THREE.Vector3());
+  product.position.set(-c.x, -box.min.y, -c.z);
+  productHeight = box.max.y - box.min.y;
+  target.set(0, productHeight / 2 + Theme.floatBase, 0);
+  controls.target.copy(target);
+}
+
+/* =====================================================================
+   7. Camera
+===================================================================== */
+function cameraPosFor(angle, padding = 1.3) {
+  const a = Theme.angles[angle] ?? angle;
+  const radius = Math.max(productHeight, 1) * 0.55;
+  const vF = THREE.MathUtils.degToRad(camera.fov);
+  const hF = 2 * Math.atan(Math.tan(vF / 2) * camera.aspect);
+  const dist = (radius / Math.sin(Math.min(vF, hF) / 2)) * padding;
+  return new THREE.Vector3().setFromSphericalCoords(
+    dist, THREE.MathUtils.degToRad(90 - a.elevation), THREE.MathUtils.degToRad(a.azimuth)
+  ).add(target);
+}
+
+let tweening = false;
+let currentAngle = params.get('angle') ?? 'hero';
+function goTo(angle, duration = 1.4) {
+  currentAngle = angle;
+  updateSummary();
+  const to = cameraPosFor(angle);
+  if (duration === 0) { camera.position.copy(to); camera.lookAt(target); return null; }
+  tweening = true;
+  controls.enabled = false;
+  return gsap.to(camera.position, {
+    x: to.x, y: to.y, z: to.z, duration, ease: 'power3.inOut',
+    onUpdate: () => camera.lookAt(target),
+    onComplete: () => { tweening = false; controls.enabled = true; },
+  });
+}
+
+/* =====================================================================
+   8. Behaviours (the "alive" part)
+===================================================================== */
+const pointer = new THREE.Vector2();
+const pointerSmooth = new THREE.Vector2();
+let lastInteract = performance.now();
+let spinning = false;
+let autoRotate = !STILL;
+controls.addEventListener('start', () => { lastInteract = performance.now(); });
+
+const raycaster = new THREE.Raycaster();
+function hitProduct() {
+  raycaster.setFromCamera(pointer, camera);
+  return raycaster.intersectObject(product, true).length > 0;
+}
+canvas.addEventListener('pointermove', (e) => {
+  pointer.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  canvas.style.cursor = hitProduct() ? 'pointer' : 'grab';
+});
+let downAt = null;
+canvas.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; });
+canvas.addEventListener('pointerup', (e) => {
+  if (!downAt) return;
+  const moved = Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]);
+  downAt = null;
+  if (moved < 5 && hitProduct()) spin();
+});
+
+function spin() {
+  if (spinning) return;
+  spinning = true;
+  lastInteract = performance.now();
+  gsap.to(pivot.rotation, { y: pivot.rotation.y + Math.PI * 2, duration: 1.6, ease: 'power3.inOut', onComplete: () => { spinning = false; } });
+  gsap.timeline() // buoyancy: dunk, rise, settle like it's floating on water
+    .to(pivot.position, { y: Theme.floatBase - 0.04, duration: 0.25, ease: 'power2.in' })
+    .to(pivot.position, { y: Theme.floatBase + 0.1, duration: 0.45, ease: 'power2.out' })
+    .to(pivot.position, { y: Theme.floatBase, duration: 1.4, ease: 'elastic.out(1, 0.3)' });
+}
+
+let screenOn = false;
+function toggleScreen(on = !screenOn, instant = false) {
+  screenOn = on;
+  const v = on ? 1 : 0;
+  if (instant) M.screen.color.setScalar(v);
+  else gsap.to(M.screen.color, { r: v, g: v, b: v, duration: on ? 0.6 : 0.35, ease: 'power2.out' });
+  if (screenBtn) { screenBtn.dataset.active = on ? '1' : ''; styleButton(screenBtn); }
+  return screenOn;
+}
+
+let activeSwatch = params.get('color') ?? 'titanium';
+function setColor(name, instant = false) {
+  const c = new THREE.Color(Theme.colorways[name] ?? name);
+  tinted.forEach((m) => {
+    if (instant) m.color.copy(c);
+    else gsap.to(m.color, { r: c.r, g: c.g, b: c.b, duration: 0.8, ease: 'power2.inOut' });
+  });
+  activeSwatch = name;
+  lastInteract = performance.now();
+  if (swatches.length) styleSwatches();
+  updateSummary();
+}
+
+let lighting = params.get('mode') === 'light' ? 'light' : 'dark'; // dark by default
+const shadowFor = (mode) => (mode === 'dark' ? 0.0 : 0.1);
+function applyRig(mode, instant) {
+  Object.entries(lights).forEach(([name, l]) => {
+    const v = l.userData.base * ModeRecipe[mode][name];
+    if (instant) l.intensity = v; else gsap.to(l, { intensity: v, duration: 0.7 });
+  });
+}
+function setLighting(mode, instant = false) {
+  lighting = mode;
+  paintUI(mode);
+  applyRig(mode, instant);
+  const bg = new THREE.Color(Theme.backdrop[mode]);
+  if (instant) { scene.background = bg; scene.environment = envMaps[mode]; ground.material.opacity = shadowFor(mode); return null; }
+  const tl = gsap.timeline();
+  tl.to(renderer, { toneMappingExposure: 0.35, duration: 0.35, ease: 'power2.in', onComplete: () => { scene.environment = envMaps[mode]; } });
+  tl.to(scene.background, { r: bg.r, g: bg.g, b: bg.b, duration: 0.7, ease: 'power2.inOut' }, 0);
+  tl.to(renderer, { toneMappingExposure: 1.0, duration: 0.6, ease: 'power2.out' });
+  return tl;
+}
+
+/* =====================================================================
+   9. Capture (always centered: view offset cleared)
+===================================================================== */
+function shot({ scale = 2, transparent = false } = {}) {
+  const prevPR = renderer.getPixelRatio();
+  const prevBg = scene.background;
+  if (transparent) scene.background = null;
+  camera.zoom = 1;
+  camera.clearViewOffset();
+  renderer.setPixelRatio(scale);
+  renderer.render(scene, camera);
+  const url = renderer.domElement.toDataURL('image/png');
+  renderer.setPixelRatio(prevPR);
+  scene.background = prevBg;
+  return url;
+}
+function captureAndDownload() {
+  const url = shot({ scale: 3 });
+  gsap.fromTo(flashEl, { opacity: 0.85 }, { opacity: 0, duration: 0.6, ease: 'power2.out' });
+  make('a', {}, { href: url, download: `product-shot-${Date.now()}.png` }).click();
+}
+
+/* =====================================================================
+   10. UI: pull-up / pull-down drawer
+===================================================================== */
+const flashEl = make('div', Style.flash);
+const wordmarkEl = make('div', Style.wordmark, { textContent: 'Shifat / Studio' });
+const hintEl = make('div', Style.hint, { textContent: 'Drag to orbit. Tap it, it pushes back.' });
+const sheetEl = make('div', Style.sheet);
+const headerEl = make('div', Style.header, { tabIndex: 0, role: 'button', ariaLabel: 'Toggle controls' });
+const gripEl = make('div', Style.grip);
+const headRow = make('div', Style.headRow);
+const titleEl = make('div', Style.title, { textContent: 'Studio' });
+const summaryEl = make('div', Style.summary);
+headRow.append(titleEl, summaryEl);
+headerEl.append(gripEl, headRow);
+const bodyEl = make('div', Style.body);
+sheetEl.append(headerEl, bodyEl);
+document.body.append(flashEl, wordmarkEl, hintEl, sheetEl);
+if (params.has('noui')) [sheetEl, wordmarkEl, hintEl].forEach((n) => { n.style.display = 'none'; });
+setTimeout(() => { hintEl.style.opacity = 0; }, 5000);
+
+const buttons = [], swatches = [], angleBtns = {};
+let lightBtn = null, screenBtn = null;
+const skin = () => Skin[lighting];
+
+function styleButton(b) {
+  const k = skin(), on = !!b.dataset.active;
+  b.style.background = on ? k.activeBg : 'transparent';
+  b.style.color = on ? k.activeText : k.text;
+}
+let currentParent = bodyEl;
+function group(label, style) {
+  const gEl = make('div', Style.group);
+  gEl.append(make('div', Style.label, { textContent: label }));
+  const body = make('div', style);
+  gEl.append(body);
+  bodyEl.append(gEl);
+  currentParent = body;
+  return body;
+}
+function button(label, onClick) {
+  const b = make('button', Style.btn, { textContent: label });
+  b.addEventListener('mouseenter', () => { if (!b.dataset.active) b.style.background = skin().hover; });
+  b.addEventListener('mouseleave', () => styleButton(b));
+  b.addEventListener('pointerdown', () => { b.style.transform = 'scale(0.94)'; });
+  b.addEventListener('pointerup', () => { b.style.transform = 'scale(1)'; });
+  b.addEventListener('pointerleave', () => { b.style.transform = 'scale(1)'; });
+  b.addEventListener('click', onClick);
+  currentParent.append(b);
+  buttons.push(b);
+  return b;
+}
+function setActive(map, keyName) {
+  Object.entries(map).forEach(([k, b]) => { b.dataset.active = k === keyName ? '1' : ''; styleButton(b); });
+}
+function styleSwatches() {
+  const k = skin();
+  swatches.forEach((s) => {
+    const on = s.dataset.swatch === activeSwatch;
+    s.style.borderColor = on ? k.swatchOn : k.swatchRing;
+    s.style.transform = on ? 'scale(1.18)' : 'scale(1)';
+  });
+}
+function updateSummary() { summaryEl.textContent = `${currentAngle} / ${activeSwatch}`; }
+
+const segmentEl = group('View', Style.segment);
+Object.keys(Theme.angles).forEach((name) => {
+  angleBtns[name] = button(name[0].toUpperCase() + name.slice(1), () => { goTo(name); setActive(angleBtns, name); lastInteract = performance.now(); });
+});
+const swatchRowEl = group('Finish', Style.swatchRow);
+Object.entries(Theme.colorways).forEach(([name, hex]) => {
+  const s = make('button', { ...Style.swatch, background: hex }, { title: name });
+  s.dataset.swatch = name;
+  s.addEventListener('click', () => setColor(name));
+  swatchRowEl.append(s);
+  swatches.push(s);
+});
+group('Studio', Style.actions);
+lightBtn = button('Light', () => setLighting(lighting === 'light' ? 'dark' : 'light'));
+screenBtn = button('Screen', () => toggleScreen());
+const autoBtn = button('Auto', () => { autoRotate = !autoRotate; autoBtn.dataset.active = autoRotate ? '1' : ''; styleButton(autoBtn); });
+autoBtn.dataset.active = autoRotate ? '1' : '';
+const captureBtn = make('button', Style.primary, { textContent: 'Capture shot' });
+captureBtn.addEventListener('pointerdown', () => { captureBtn.style.transform = 'scale(0.97)'; });
+captureBtn.addEventListener('pointerup', () => { captureBtn.style.transform = 'scale(1)'; });
+captureBtn.addEventListener('pointerleave', () => { captureBtn.style.transform = 'scale(1)'; });
+captureBtn.addEventListener('click', captureAndDownload);
+bodyEl.append(captureBtn);
+
+function paintUI(mode) {
+  const k = Skin[mode];
+  Object.assign(sheetEl.style, { background: k.sheetBg, border: `1px solid ${k.sheetBorder}`, color: k.text, boxShadow: k.shadow });
+  gripEl.style.background = k.grip;
+  segmentEl.style.background = k.track;
+  Object.assign(captureBtn.style, { background: k.primaryBg, color: k.primaryText });
+  wordmarkEl.style.color = k.text;
+  hintEl.style.color = k.hint;
+  buttons.forEach(styleButton);
+  styleSwatches();
+  if (lightBtn) lightBtn.textContent = mode === 'light' ? 'Dark' : 'Light';
+}
+
+// ---- Drawer physics: drag the header, flick or tap to open/close ----
+const sheet = { y: 0 };            // 0 = open, closedY = only the header peeks
+let closedY = 0, drawerOpen = !params.has('closed');
+function measureSheet() { closedY = bodyEl.offsetHeight; }
+function applySheet() {
+  sheetEl.style.transform = `translate(-50%, ${sheet.y}px)`;
+  bodyEl.style.opacity = closedY ? String(THREE.MathUtils.clamp(1 - sheet.y / closedY, 0, 1)) : '1';
+  gripEl.style.width = drawerOpen ? '36px' : '44px';
+}
+function setDrawer(open, instant = false) {
+  drawerOpen = open;
+  const y = open ? 0 : closedY;
+  gsap.killTweensOf(sheet);
+  if (instant) { sheet.y = y; applySheet(); return; }
+  gsap.to(sheet, { y, duration: 0.6, ease: 'elastic.out(1, 0.85)', onUpdate: applySheet });
+  applySheet();
+}
+let drag = null;
+headerEl.addEventListener('pointerdown', (e) => {
+  drag = { y0: e.clientY, s0: sheet.y, last: e.clientY, v: 0, moved: false };
+  headerEl.setPointerCapture(e.pointerId);
+  headerEl.style.cursor = 'grabbing';
+  gsap.killTweensOf(sheet);
+});
+headerEl.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  const dy = e.clientY - drag.y0;
+  if (Math.abs(dy) > 4) drag.moved = true;
+  let y = drag.s0 + dy;
+  if (y < 0) y *= 0.25;                                  // rubber band past open
+  if (y > closedY) y = closedY + (y - closedY) * 0.25;   // rubber band past closed
+  drag.v = e.clientY - drag.last; drag.last = e.clientY;
+  sheet.y = y; applySheet();
+});
+const endDrag = () => {
+  if (!drag) return;
+  const d = drag; drag = null;
+  headerEl.style.cursor = 'grab';
+  if (!d.moved) return setDrawer(!drawerOpen);
+  setDrawer(d.v < -2 ? true : d.v > 2 ? false : sheet.y < closedY / 2);
+};
+headerEl.addEventListener('pointerup', endDrag);
+headerEl.addEventListener('pointercancel', endDrag);
+headerEl.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDrawer(!drawerOpen); } });
+
+// The scene makes room for the drawer: shift the frame up by half the covered height
+const view = { shift: 0, zoom: 1 };
+function sceneShiftTarget() {
+  if (params.has('noui')) return 0;
+  const covered = sheetEl.offsetHeight - sheet.y + 12;
+  return Math.max(0, covered * 0.5);
+}
+
+/* =====================================================================
+   11. Loop
+===================================================================== */
+const t0 = performance.now();
+let stillFrames = 0;
+function tick() {
+  const t = (performance.now() - t0) / 1000;
+  const idle = performance.now() - lastInteract > 3500;
+  if (!STILL) {
+    if (!spinning) pivot.position.y = Theme.floatBase + Math.sin(t * 1.1) * 0.015; // breathing float
+    if (autoRotate && idle && !spinning) pivot.rotation.y += 0.0025;                  // idle turntable
+    pointerSmooth.lerp(pointer, 0.05);                                                 // parallax tilt
+    pivot.rotation.x = -pointerSmooth.y * 0.05;
+    pivot.rotation.z = pointerSmooth.x * -0.035;
+    if (lighting === 'light') ground.material.opacity = 0.1 - (pivot.position.y - Theme.floatBase) * 0.3;
+  }
+  // Fit the product into the free area above the drawer: shift up + gently zoom out
+  const covered = sceneShiftTarget() * 2;
+  const k = STILL ? 1 : 0.12;
+  view.shift += (covered * 0.5 - view.shift) * k;
+  view.zoom += (THREE.MathUtils.clamp((innerHeight - covered) / innerHeight, 0.55, 1) - view.zoom) * k;
+  camera.zoom = view.zoom;
+  camera.setViewOffset(innerWidth, innerHeight, 0, view.shift, innerWidth, innerHeight);
+  if (!tweening) controls.update();
+  syncRig();
+  if (!STILL || stillFrames++ < 3) renderer.render(scene, camera); // still mode idles after a few frames
+  requestAnimationFrame(tick);
+}
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight, false);
+  measureSheet();
+  setDrawer(drawerOpen, true);
+});
+
+/* =====================================================================
+   12. Boot + intro
+===================================================================== */
+async function loadModel(url) {
+  const gltf = await new GLTFLoader().loadAsync(url);
+  setProduct(gltf.scene);
+}
+if (params.get('model')) await loadModel(params.get('model'));
+else setProduct(buildPhone());
+
+pivot.position.y = Theme.floatBase;
+setLighting(lighting, true);
+setColor(activeSwatch, true);
+if (params.has('screen')) toggleScreen(true, true);
+camera.aspect = innerWidth / innerHeight;
+camera.updateProjectionMatrix();
+setActive(angleBtns, currentAngle);
+if (params.get('rot')) pivot.rotation.y = THREE.MathUtils.degToRad(+params.get('rot'));
+measureSheet();
+document.fonts?.ready.then(() => { measureSheet(); setDrawer(drawerOpen, true); });
+
+if (STILL) {
+  setDrawer(drawerOpen, true);
+  goTo(currentAngle, 0);
+} else {
+  sheet.y = sheetEl.offsetHeight + 40; applySheet();   // drawer rises in after the camera move
+  camera.position.copy(cameraPosFor({ azimuth: 200, elevation: 22 }, 2.2));
+  camera.lookAt(target);
+  gsap.timeline()
+    .from(pivot.rotation, { y: -Math.PI * 0.75, duration: 2.0, ease: 'expo.out' }, 0)
+    .add(goTo(currentAngle, 2.0), 0.1)
+    .add(() => setDrawer(drawerOpen), 1.1);
+}
+tick();
+
+/* =====================================================================
+   13. Agent API
+===================================================================== */
+window.studio = {
+  THREE, scene, camera, renderer, materials: M, theme: Theme, threePoint: ThreePoint, lights,
+  goTo, spin, setColor, setLighting, toggleScreen, shot, loadModel, setDrawer,
+  build: (fn) => setProduct(fn({ THREE, slab, roundedRect, materials: M })),
+  setAutoRotate: (on) => { autoRotate = on; },
+  ready: true,
+};
+</script>
+</body>
+</html>
