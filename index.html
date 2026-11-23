@@ -245,7 +245,7 @@ composer.setPixelRatio(renderer.getPixelRatio());
 composer.setSize(innerWidth, innerHeight);
 composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.0, 0.2, 0.98); // only the hottest glints glow (ref has no halo)
-composer.addPass(bloom);
+// bloom off (Apple's shot has no halo); pass kept out of the chain for performance
 const vignette = new ShaderPass(VignetteShader);
 vignette.uniforms.offset.value = 1.0;
 vignette.uniforms.darkness.value = 1.15;
@@ -416,7 +416,7 @@ function buildPhone() {
   // Baked as a soft multiply-style gradient so the top stays bright and the bottom settles ~30% darker.
   const flagCv = document.createElement('canvas'); flagCv.width = 4; flagCv.height = 256;
   const fg = flagCv.getContext('2d'), fgrad = fg.createLinearGradient(0, 0, 0, 256);
-  fgrad.addColorStop(0, 'rgba(0,0,0,0)'); fgrad.addColorStop(0.35, 'rgba(0,0,0,0.04)'); fgrad.addColorStop(1, 'rgba(0,0,0,0.5)');
+  fgrad.addColorStop(0, 'rgba(0,0,0,0)'); fgrad.addColorStop(0.35, 'rgba(0,0,0,0.04)'); fgrad.addColorStop(1, 'rgba(0,0,0,0.56)');
   fg.fillStyle = fgrad; fg.fillRect(0, 0, 4, 256);
   const flag = new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(gw, gTop - gBot, 0.07), 48),
     new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(flagCv), transparent: true, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -1 }));
