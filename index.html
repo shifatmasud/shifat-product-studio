@@ -630,7 +630,7 @@ let activeSwatch = params.get('color') ?? 'titanium';
 function setColor(name, instant = false) {
   const c = new THREE.Color(Theme.colorways[name] ?? name);
   tinted.forEach((m) => {
-    const t = m === M.plateau ? c.clone().multiplyScalar(1.07) : m === M.back ? c.clone().multiplyScalar(1.12) : c; // back glass: frosted, reads lighter than the anodized frame // plateau: lower env share (0.7), so a brighter base keeps it level with the ref (masked fit)
+    const t = m === M.plateau ? c.clone().multiplyScalar(1.07) : m === M.back ? c.clone().multiplyScalar(1.12) : m === M.logo ? c.clone().multiplyScalar(1.1) : c; // back glass: frosted, reads lighter than the anodized frame // plateau: lower env share (0.7), so a brighter base keeps it level with the ref (masked fit)
     if (instant) m.color.copy(t);
     else gsap.to(m.color, { r: t.r, g: t.g, b: t.b, duration: 0.8, ease: 'power2.inOut' });
   });
