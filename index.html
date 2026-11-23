@@ -293,8 +293,8 @@ const M = {
   ring:    new THREE.MeshPhysicalMaterial({ color: Theme.colorways.titanium, metalness: 1, roughness: 0.1, anisotropy: 0.6, envMapIntensity: 1.2 }), // diamond-cut, follows colorway
   lensCore:new THREE.MeshPhysicalMaterial({ color: '#1c2848', metalness: 0.5, roughness: 0.08, clearcoat: 1, iridescence: 0.6, iridescenceIOR: 1.6 }),
   // Sapphire cover with AR coating: deep black with violet/teal flicker at grazing angles
-  lens:    new THREE.MeshPhysicalMaterial({ color: '#05060a', metalness: 0, roughness: 0.02, clearcoat: 1, clearcoatRoughness: 0, iridescence: 0.3, iridescenceIOR: 1.8, envMapIntensity: 1.5 }),
-  lensIn:  new THREE.MeshPhysicalMaterial({ color: '#0b0c10', metalness: 0.2, roughness: 0.25 }),
+  lens:    new THREE.MeshPhysicalMaterial({ color: '#030406', metalness: 0, roughness: 0.02, clearcoat: 1, clearcoatRoughness: 0, iridescence: 0.3, iridescenceIOR: 1.8, envMapIntensity: 0.6 }),
+  lensIn:  new THREE.MeshPhysicalMaterial({ color: '#050608', metalness: 0.2, roughness: 0.35, envMapIntensity: 0.3 }),
   sapphire:new THREE.MeshPhysicalMaterial({ color: '#202126', metalness: 0.1, roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0.02 }),
   screen:  new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false }), // unlit: only its own light
   island:  new THREE.MeshBasicMaterial({ color: 0x000000 }),                     // Dynamic Island, unlit black
@@ -580,6 +580,7 @@ function viewTarget(a) { return baseTarget.clone().setY(baseTarget.y + (a.lift ?
 function applyView(a) { // per-view fov + aim point (close-up aims at the camera plateau)
   camera.fov = a.fov ?? Theme.fov; camera.updateProjectionMatrix();
   target.copy(viewTarget(a)); controls.target.copy(target);
+  controls.maxPolarAngle = a.elevation < 0 ? Math.PI - 0.05 : Math.PI / 2 - 0.04; // close-up looks up from below the horizon
 }
 let tweening = false;
 let currentAngle = params.get('angle') ?? 'hero';
