@@ -435,7 +435,7 @@ function buildPhone() {
       let nx = qx > 0 || qy > 0 ? ox * Math.sign(x) : (qx > qy ? Math.sign(x) : 0), ny = qx > 0 || qy > 0 ? oy * Math.sign(y) : (qy >= qx ? Math.sign(y) : 0);
       const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl;
       // image-left in the back view is local -x (mesh is turned 180deg)
-      const wdir = Math.max(ny, 0) * 1.0 + Math.max(-nx, 0) * 0.9 + Math.max(nx, 0) * 0.2 + Math.max(-ny, 0) * 0.7;
+      const wdir = Math.max(ny, 0) * 1.0 + Math.max(-nx, 0) * 0.9 + Math.max(nx, 0) * 0.2 + Math.max(-ny, 0) * 1.0;
       const glint = 0.4 * wdir * Math.exp(-d / 0.0035);
       const sh = 0.0 * Math.pow(Math.max(0, (y + ch / 2) / ch), 2.0);
       const a = Math.min(1, glint + sh), k = (j * tw + i) * 4;
