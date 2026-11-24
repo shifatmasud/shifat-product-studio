@@ -68,7 +68,7 @@ const Theme = {
     back:  { azimuth: 180, elevation: 4 },
     side:  { azimuth: 95,  elevation: 2 },
     top:   { azimuth: 160, elevation: 60 },
-    closeup: { azimuth: 178, elevation: -33, dist: 0.53, lift: 0.26, fov: 38, key: 0.78 }, // fit to Apple's camera close-up (low, looking up the back at the plateau)
+    closeup: { azimuth: 178, elevation: -33, dist: 0.53, lift: 0.26, fov: 38, key: 0.78, ringR: 0.3 }, // fit to Apple's camera close-up (low, looking up the back at the plateau)
   },
   fov: 18,
   floatBase: 0.06,
@@ -621,6 +621,7 @@ var viewKey = 1; // per-view key-light scale (Apple lights each angle separately
 function applyView(a) { // per-view fov + aim point (close-up aims at the camera plateau)
   camera.fov = a.fov ?? Theme.fov; camera.updateProjectionMatrix();
   viewKey = a.key ?? 1;
+  try { M.ring.roughness = a.ringR ?? 0.1; } catch (e) {} // per-view ring finish (close-up reads satin, back stays polished)
   try { applyRig(lighting, true); } catch (e) {} // rig not ready yet on first load
   target.copy(viewTarget(a)); controls.target.copy(target);
   controls.maxPolarAngle = a.elevation < 0 ? Math.PI - 0.05 : Math.PI / 2 - 0.04; // close-up looks up from below the horizon
