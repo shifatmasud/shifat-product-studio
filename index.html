@@ -445,7 +445,7 @@ function buildPhone() {
         const dy = y - (ly - 0.010), r = Math.hypot(x - lx, dy * 1.35);
         if (r < 0.084 && Math.hypot(x - lx, y - ly) < 0.084) continue;
         const below = 1 / (1 + Math.exp((y - ly + 0.02) / 0.015));               // stronger under the lens
-        cref += (0.16 * Math.exp(-Math.pow((r - 0.092) / 0.007, 2)) + 0.05 * Math.exp(-Math.pow((r - 0.104) / 0.012, 2))) * (0.35 + 0.65 * below);
+        cref += (0.6 * Math.exp(-Math.pow((r - 0.089) / 0.006, 2)) + 0.1 * Math.exp(-Math.pow((r - 0.102) / 0.012, 2))) * (0.35 + 0.65 * below);
       }
       const a = Math.min(1, glint + sh + cref), k = (j * tw + i) * 4;
       im.data[k] = 255 * a; im.data[k + 1] = 255 * a * 0.82; im.data[k + 2] = 255 * a * 0.66; im.data[k + 3] = 255;
