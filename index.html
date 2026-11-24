@@ -417,7 +417,7 @@ function buildPhone() {
   // Measured on the ref: plateau top ~2.15% of the height below the frame top, lower edge at ~28.9%.
   const gw = W * 0.888, pTop = 0.0215, pBot = 0.289;
   const PH = (pBot - pTop) * H;
-  const plateau = new THREE.Mesh(slab({ w: gw, h: PH, d: 0.034, corner: C - (W - gw) / 2, bevel: 0.014, bevelSegments: 12 }), M.plateau);
+  const plateau = new THREE.Mesh(slab({ w: gw, h: PH, d: 0.034, corner: C - (W - gw) / 2, bevel: 0.018, bevelSegments: 12 }), M.plateau);
   plateau.position.set(0, by((pTop + pBot) / 2), zB - 0.008);
   g.add(plateau);
   const zP = zB - 0.025;                                            // plateau outer surface
