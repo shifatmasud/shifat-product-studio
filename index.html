@@ -413,14 +413,17 @@ function buildPhone() {
   const by = (fy) => H / 2 - fy * H;
 
   // Full-width aluminum camera plateau: top ~29% of the back, soft step at its lower edge
-  const PH = 0.29 * H;
-  const plateau = new THREE.Mesh(slab({ w: W, h: PH, d: 0.034, corner: C, bevel: 0.014, bevelSegments: 12 }), M.plateau);
-  plateau.position.set(0, H / 2 - PH / 2, zB - 0.008);
+  // Inset like Apple's: same left/right margin as the glass panel (logo container), so their edges line up.
+  // Measured on the ref: plateau top ~2.15% of the height below the frame top, lower edge at ~28.9%.
+  const gw = W * 0.888, pTop = 0.0215, pBot = 0.289;
+  const PH = (pBot - pTop) * H;
+  const plateau = new THREE.Mesh(slab({ w: gw, h: PH, d: 0.034, corner: C - (W - gw) / 2, bevel: 0.014, bevelSegments: 12 }), M.plateau);
+  plateau.position.set(0, by((pTop + pBot) / 2), zB - 0.008);
   g.add(plateau);
   const zP = zB - 0.025;                                            // plateau outer surface
 
   // Ceramic Shield glass panel: inset, frosted, same hue but softer/lighter
-  const gTop = by(0.32), gBot = by(0.972), gw = W * 0.888;
+  const gTop = by(0.32), gBot = by(0.972);
   const glass = flat(gw, gTop - gBot, 0.07, M.back, 48);
   glass.rotation.y = Math.PI; glass.position.set(0, (gTop + gBot) / 2, zB - 0.0006); g.add(glass);
   // Studio "flag" falloff: Apple's glass darkens toward the bottom (light flagged off the lower half).
@@ -485,8 +488,8 @@ function buildPhone() {
   // plateau step: occlusion falling onto the glass right under the plateau's lower edge
   const stepH = 0.07;
   const stepAO = aoMat(aoTex((u, v) => 0.38 * Math.pow(1 - v, 2.2) * Math.min(1, Math.min(u, 1 - u) * 12)));
-  const step = new THREE.Mesh(new THREE.PlaneGeometry(W * 0.94, stepH), stepAO);
-  step.rotation.y = Math.PI; step.position.set(0, H / 2 - PH - stepH / 2, zB - 0.0009); g.add(step);
+  const step = new THREE.Mesh(new THREE.PlaneGeometry(gw * 0.94, stepH), stepAO);
+  step.rotation.y = Math.PI; step.position.set(0, by(pBot) - stepH / 2, zB - 0.0009); g.add(step);
 
   // Flash (top right), mic dot, LiDAR (black, lower right)
   const flashM = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.004, 48), M.flash);
