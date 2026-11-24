@@ -421,6 +421,34 @@ function buildPhone() {
   plateau.position.set(0, by((pTop + pBot) / 2), zB - 0.008);
   g.add(plateau);
   const zP = zB - 0.025;                                            // plateau outer surface
+  // Plateau reflections (Apple's ref): bright glint along the top and left bevel, softer on the right and lower step,
+  // plus a faint sheen that fades down the face. Baked additive overlay on the plateau's flat face.
+  {
+    const pb = 0.014, cw = gw - 2 * pb, ch = PH - 2 * pb, cr = Math.max(C - (W - gw) / 2 - pb, 0.001);
+    const tw = 512, th = Math.round(512 * ch / cw), cv = document.createElement('canvas'); cv.width = tw; cv.height = th;
+    const cx = cv.getContext('2d'), im = cx.createImageData(tw, th);
+    for (let j = 0; j < th; j++) for (let i = 0; i < tw; i++) {
+      const x = (i + 0.5) / tw * cw - cw / 2, y = ch / 2 - (j + 0.5) / th * ch;   // canvas row 0 = top of the face
+      const qx = Math.abs(x) - (cw / 2 - cr), qy = Math.abs(y) - (ch / 2 - cr);
+      const ox = Math.max(qx, 0), oy = Math.max(qy, 0), out = Math.hypot(ox, oy);
+      const d = Math.max(-(out + Math.min(Math.max(qx, qy), 0) - cr), 0);       // distance inside the edge
+      let nx = qx > 0 || qy > 0 ? ox * Math.sign(x) : (qx > qy ? Math.sign(x) : 0), ny = qx > 0 || qy > 0 ? oy * Math.sign(y) : (qy >= qx ? Math.sign(y) : 0);
+      const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl;
+      // image-left in the back view is local -x (mesh is turned 180deg)
+      const wdir = Math.max(ny, 0) * 1.0 + Math.max(-nx, 0) * 0.9 + Math.max(nx, 0) * 0.2 + Math.max(-ny, 0) * 0.4;
+      const glint = 0.6 * wdir * Math.exp(-d / 0.005);
+      const sh = 0.0 * Math.pow(Math.max(0, (y + ch / 2) / ch), 2.0);
+      const a = Math.min(1, glint + sh), k = (j * tw + i) * 4;
+      im.data[k] = 255 * a; im.data[k + 1] = 255 * a * 0.82; im.data[k + 2] = 255 * a * 0.66; im.data[k + 3] = 255;
+    }
+    cx.putImageData(im, 0, 0);
+    const rt = new THREE.CanvasTexture(cv); rt.colorSpace = THREE.NoColorSpace;
+    const refl = new THREE.Mesh(new THREE.ShapeGeometry(roundedRect(cw, ch, cr), 48),
+      new THREE.MeshBasicMaterial({ map: rt, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -1 }));
+    { const uv = refl.geometry.attributes.uv, pos = refl.geometry.attributes.position;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i) / cw + 0.5, pos.getY(i) / ch + 0.5); }
+    refl.rotation.y = Math.PI; refl.position.set(0, by((pTop + pBot) / 2), zP - 0.0002); g.add(refl);
+  }
 
   // Ceramic Shield glass panel: inset, frosted, same hue but softer/lighter
   const gTop = by(0.32), gBot = by(0.972);
