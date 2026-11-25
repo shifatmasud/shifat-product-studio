@@ -68,7 +68,7 @@ const Theme = {
     back:  { azimuth: 180, elevation: 4 },
     side:  { azimuth: 95,  elevation: 2 },
     top:   { azimuth: 160, elevation: 60 },
-    closeup: { azimuth: 178, elevation: -33, dist: 0.53, lift: 0.26, fov: 38, key: 0.78, ringR: 0.3, tintPlat: [1, 0.8, 0.62], tintBody: [1.15, 1.08, 0.88], exp: 0.95, lensInR: 0.9 }, // fit to Apple's camera close-up (low, looking up the back at the plateau)
+    closeup: { azimuth: 178, elevation: -33, dist: 0.53, lift: 0.26, fov: 38, key: 0.78, ringR: 0.3, tintPlat: [1, 0.8, 0.62], tintBody: [1.15, 1.08, 0.88], exp: 0.95, lensInR: 0.9, vig: 0.95 }, // fit to Apple's camera close-up (low, looking up the back at the plateau)
   },
   fov: 18,
   floatBase: 0.06,
@@ -621,6 +621,7 @@ var viewKey = 1; // per-view key-light scale (Apple lights each angle separately
 function applyView(a) { // per-view fov + aim point (close-up aims at the camera plateau)
   camera.fov = a.fov ?? Theme.fov; camera.updateProjectionMatrix();
   viewKey = a.key ?? 1;
+  try { if (a.vig !== undefined) vignette.uniforms.darkness.value = a.vig; else if (typeof lighting !== 'undefined') vignette.uniforms.darkness.value = lighting === 'dark' ? 0.9 : 0.35; } catch (e) {} // per-view vignette
   try { const m = M.lensIn; if (m.userData.r0 === undefined) m.userData.r0 = m.roughness; m.roughness = a.lensInR ?? m.userData.r0; } catch (e) {} // per-view lens interior gloss (sharp glass reads black like Apple's)
   try { renderer.toneMappingExposure = EXPOSURE * (a.exp ?? 1); } catch (e) {} // per-view exposure
   try { M.ring.roughness = a.ringR ?? 0.1; } catch (e) {}
