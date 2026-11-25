@@ -482,7 +482,7 @@ function buildPhone() {
   // Three big lenses in a triangle with thick anodized rings (ring color = body color)
   const lens = (fx, fy) => {
     const x = bx(fx), y = by(fy);
-    const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.083, 0.034, 96 * SEG), M.ring);
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.083, 0.03, 96 * SEG), M.ring);
     ring.rotation.x = Math.PI / 2; ring.position.set(x, y, zP - 0.013); g.add(ring);
     const bevelRing = new THREE.Mesh(new THREE.TorusGeometry(0.0812, 0.0042, 20 * SEG, 128 * SEG), M.ring); // polished diamond-cut outer chamfer
     bevelRing.position.set(x, y, zP - 0.0275); g.add(bevelRing);
